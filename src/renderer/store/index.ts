@@ -19,13 +19,15 @@ import { createSettingsSlice } from './settingsSlice';
 // Combined Store Type
 // ============================================================================
 
-export type AppStore = EditorSlice &
-  AISlice &
-  FileSystemSlice &
-  UISlice &
-  GitSlice &
-  SearchSlice &
-  SettingsSlice;
+export interface AppStore {
+  editor: EditorSlice;
+  ai: AISlice;
+  fileSystem: FileSystemSlice;
+  ui: UISlice;
+  git: GitSlice;
+  search: SearchSlice;
+  settings: SettingsSlice;
+}
 
 // ============================================================================
 // Action Logger
@@ -54,70 +56,71 @@ export function clearActionLog(): void {
 export const selectors = {
   // Editor selectors
   activeTab: (state: AppStore) => {
-    const group = state.editorGroups.find((g) => g.id === state.activeGroupId);
+    const group = state.editor.groups.find((g) => g.id === state.editor.activeGroupId);
     if (!group) return null;
     return group.tabs.find((t) => t.id === group.activeTabId) ?? null;
   },
 
   activeTabContent: (state: AppStore) => {
-    const group = state.editorGroups.find((g) => g.id === state.activeGroupId);
+    const group = state.editor.groups.find((g) => g.id === state.editor.activeGroupId);
     if (!group) return '';
     const tab = group.tabs.find((t) => t.id === group.activeTabId);
     return tab?.content ?? '';
   },
 
   dirtyTabs: (state: AppStore) => {
-    return state.editorGroups.flatMap((g) => g.tabs.filter((t) => t.isDirty));
+    return state.editor.groups.flatMap((g) => g.tabs.filter((t) => t.isDirty));
   },
 
   totalTabCount: (state: AppStore) => {
-    return state.editorGroups.reduce((sum, g) => sum + g.tabs.length, 0);
+    return state.editor.groups.reduce((sum: number, g) => sum + g.tabs.length, 0);
   },
 
   // AI selectors
   activeConversation: (state: AppStore) => {
-    return state.conversations.find((c) => c.id === state.activeConversationId) ?? null;
+    return state.ai.conversations.find((c) => c.id === state.ai.activeConversationId) ?? null;
   },
 
   activeMessages: (state: AppStore) => {
-    const conv = state.conversations.find((c) => c.id === state.activeConversationId);
+    const conv = state.ai.conversations.find((c) => c.id === state.ai.activeConversationId);
     return conv?.messages ?? [];
   },
 
-  isAIBusy: (state: AppStore) => state.aiLoading || state.streamingMessageId !== null,
+  isAIBusy: (state: AppStore) => state.ai.aiLoading || state.ai.streamingMessageId !== null,
 
   // FileSystem selectors
-  expandedDirs: (state: AppStore) => state.expandedDirs,
-  isPathExpanded: (path: string) => (state: AppStore) => state.expandedDirs.has(path),
+  expandedDirs: (state: AppStore) => state.fileSystem.expandedDirs,
+  isPathExpanded: (path: string) => (state: AppStore) => state.fileSystem.expandedDirs.includes(path),
 
   fileTreeFlat: (state: AppStore) => {
-    const result: Array<{ node: (typeof state.fileTree)[0]; depth: number }> = [];
-    const walk = (nodes: typeof state.fileTree, depth: number) => {
+    const result: Array<{ node: (typeof state.fileSystem.fileTree)[0]; depth: number }> = [];
+    const expandedSet = new Set(state.fileSystem.expandedDirs);
+    const walk = (nodes: typeof state.fileSystem.fileTree, depth: number) => {
       for (const node of nodes) {
         result.push({ node, depth });
-        if (node.type === 'directory' && node.children && state.expandedDirs.has(node.path)) {
+        if (node.type === 'directory' && node.children && expandedSet.has(node.path)) {
           walk(node.children, depth + 1);
         }
       }
     };
-    walk(state.fileTree, 0);
+    walk(state.fileSystem.fileTree, 0);
     return result;
   },
 
   // Git selectors
-  stagedFiles: (state: AppStore) => state.gitFiles.filter((f) => f.staged),
-  unstagedFiles: (state: AppStore) => state.gitFiles.filter((f) => !f.staged),
-  hasConflicts: (state: AppStore) => state.conflictCount > 0,
-  isSynced: (state: AppStore) => state.aheadCount === 0 && state.behindCount === 0,
+  stagedFiles: (state: AppStore) => state.git.gitFiles.filter((f) => f.staged),
+  unstagedFiles: (state: AppStore) => state.git.gitFiles.filter((f) => !f.staged),
+  hasConflicts: (state: AppStore) => state.git.conflictCount > 0,
+  isSynced: (state: AppStore) => state.git.aheadCount === 0 && state.git.behindCount === 0,
 
   // Search selectors
-  hasActiveSearch: (state: AppStore) => state.searchQuery.length > 0,
-  searchResultCount: (state: AppStore) => state.searchResults.length,
+  hasActiveSearch: (state: AppStore) => state.search.searchQuery.length > 0,
+  searchResultCount: (state: AppStore) => state.search.searchResults.length,
 
   // UI selectors
-  isZenMode: (state: AppStore) => state.zenMode,
-  visibleNotifications: (state: AppStore) => state.notifications.slice(0, 5),
-  unreadNotificationCount: (state: AppStore) => state.notifications.length,
+  isZenMode: (state: AppStore) => state.ui.zenMode,
+  visibleNotifications: (state: AppStore) => state.ui.notifications.slice(0, 5),
+  unreadNotificationCount: (state: AppStore) => state.ui.notifications.length,
 };
 
 // ============================================================================
@@ -128,26 +131,85 @@ export const useAppStore = create<AppStore>()(
   devtools(
     subscribeWithSelector(
       persist(
-        (...a) => ({
-          ...createEditorSlice(...a),
-          ...createAISlice(...a),
-          ...createFileSystemSlice(...a),
-          ...createUISlice(...a),
-          ...createGitSlice(...a),
-          ...createSearchSlice(...a),
-          ...createSettingsSlice(...a),
+        (set, get) => ({
+          editor: createEditorSlice(
+            ((fn: (s: { editor: EditorSlice }) => Partial<{ editor: EditorSlice }>) => {
+              set((state) => {
+                const result = fn({ editor: state.editor });
+                if (result.editor) return { editor: { ...state.editor, ...result.editor } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createEditorSlice>[0],
+            (() => ({ editor: get().editor })) as Parameters<typeof createEditorSlice>[1]
+          ),
+          ai: createAISlice(
+            ((fn: (s: { ai: AISlice }) => Partial<{ ai: AISlice }>) => {
+              set((state) => {
+                const result = fn({ ai: state.ai });
+                if (result.ai) return { ai: { ...state.ai, ...result.ai } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createAISlice>[0],
+            (() => ({ ai: get().ai })) as Parameters<typeof createAISlice>[1]
+          ),
+          fileSystem: createFileSystemSlice(
+            ((fn: (s: { fileSystem: FileSystemSlice }) => Partial<{ fileSystem: FileSystemSlice }>) => {
+              set((state) => {
+                const result = fn({ fileSystem: state.fileSystem });
+                if (result.fileSystem) return { fileSystem: { ...state.fileSystem, ...result.fileSystem } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createFileSystemSlice>[0],
+            (() => ({ fileSystem: get().fileSystem })) as Parameters<typeof createFileSystemSlice>[1]
+          ),
+          ui: createUISlice(
+            ((fn: (s: { ui: UISlice }) => Partial<{ ui: UISlice }>) => {
+              set((state) => {
+                const result = fn({ ui: state.ui });
+                if (result.ui) return { ui: { ...state.ui, ...result.ui } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createUISlice>[0],
+            (() => ({ ui: get().ui })) as Parameters<typeof createUISlice>[1]
+          ),
+          git: createGitSlice(
+            ((fn: (s: { git: GitSlice }) => Partial<{ git: GitSlice }>) => {
+              set((state) => {
+                const result = fn({ git: state.git });
+                if (result.git) return { git: { ...state.git, ...result.git } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createGitSlice>[0],
+            (() => ({ git: get().git })) as Parameters<typeof createGitSlice>[1]
+          ),
+          search: createSearchSlice(
+            ((fn: (s: { search: SearchSlice }) => Partial<{ search: SearchSlice }>) => {
+              set((state) => {
+                const result = fn({ search: state.search });
+                if (result.search) return { search: { ...state.search, ...result.search } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createSearchSlice>[0],
+            (() => ({ search: get().search })) as Parameters<typeof createSearchSlice>[1]
+          ),
+          settings: createSettingsSlice(
+            ((fn: (s: { settings: SettingsSlice }) => Partial<{ settings: SettingsSlice }>) => {
+              set((state) => {
+                const result = fn({ settings: state.settings });
+                if (result.settings) return { settings: { ...state.settings, ...result.settings } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createSettingsSlice>[0],
+            (() => ({ settings: get().settings })) as Parameters<typeof createSettingsSlice>[1]
+          ),
         }),
         {
           name: 'cursor-ide-store',
           version: 1,
           partialize: (state) => ({
             settings: state.settings,
-            sidebarVisible: state.sidebarVisible,
-            sidebarWidth: state.sidebarWidth,
-            terminalVisible: state.terminalVisible,
-            terminalHeight: state.terminalHeight,
-            activePanel: state.activePanel,
-            recentPaths: state.recentPaths,
+            ui: state.ui,
+            fileSystem: state.fileSystem,
           }),
         }
       )
@@ -161,7 +223,7 @@ export const useAppStore = create<AppStore>()(
 // ============================================================================
 
 useAppStore.subscribe(
-  (state) => state.editorGroups.flatMap((g) => g.tabs.filter((t) => t.isDirty)).length,
+  (state) => state.editor.groups.flatMap((g) => g.tabs.filter((t) => t.isDirty)).length,
   (dirtyCount) => {
     if (dirtyCount > 0 && dirtyCount % 5 === 0) {
       console.warn(`[CursorIDE] ${dirtyCount} unsaved files`);
@@ -170,7 +232,7 @@ useAppStore.subscribe(
 );
 
 useAppStore.subscribe(
-  (state) => state.settings.theme,
+  (state) => state.settings.settings.theme,
   (theme) => {
     document.documentElement.setAttribute('data-theme', theme);
   }
@@ -191,7 +253,7 @@ function extractSnapshot(state: Record<string, unknown>): Record<string, unknown
 }
 
 export function resetStore(): void {
-  useAppStore.setState({}, true);
+  useAppStore.setState({} as AppStore, true);
 }
 
 export function getStoreSnapshot(): Partial<AppStore> {

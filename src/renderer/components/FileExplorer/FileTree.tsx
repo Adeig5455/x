@@ -140,7 +140,7 @@ const FileTreeItem: React.FC<FileTreeItemProps> = ({
       {/* Icon */}
       <span
         style={{ width: 16, height: 16, flexShrink: 0, marginRight: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-        dangerouslySetInnerHTML={{ __html: icon.svg }}
+        dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="16" height="16"><path d="${icon.path}" fill="${icon.color}"/></svg>` }}
       />
 
       {/* Name or rename input */}

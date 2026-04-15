@@ -19,10 +19,11 @@ const SettingItem: React.FC<SettingItemProps> = ({ label, description, children 
 );
 
 export const SettingsPanel: React.FC = () => {
-  const { settings, updateSettings } = useAppStore();
+  const settings = useAppStore((s) => s.settings.settings);
+  const setSetting = useAppStore((s) => s.settings.setSetting);
 
   const handleChange = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    updateSettings({ [key]: value });
+    setSetting(key, value);
   };
 
   return (

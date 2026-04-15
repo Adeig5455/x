@@ -144,7 +144,7 @@ export const TabBar: React.FC<TabBarProps> = ({
             >
               <span
                 style={{ width: 14, height: 14, flexShrink: 0, display: 'inline-flex', alignItems: 'center' }}
-                dangerouslySetInnerHTML={{ __html: icon.svg }}
+                dangerouslySetInnerHTML={{ __html: `<svg viewBox="0 0 24 24" width="14" height="14"><path d="${icon.path}" fill="${icon.color}"/></svg>` }}
               />
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>
                 {tab.fileName}
