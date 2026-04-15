@@ -55,7 +55,7 @@ export interface SearchResult {
 
 export interface GitFileStatus {
   path: string;
-  status: 'modified' | 'added' | 'deleted' | 'untracked' | 'renamed';
+  status: 'modified' | 'added' | 'deleted' | 'untracked' | 'renamed' | 'conflicted';
   staged: boolean;
 }
 
