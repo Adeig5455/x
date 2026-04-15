@@ -101,7 +101,7 @@ export type BottomPanel = 'terminal' | 'output' | 'problems';
 
 export interface Notification {
   id: string;
-  type: 'info' | 'warning' | 'error';
+  type: 'info' | 'warning' | 'error' | 'success';
   message: string;
   timestamp: number;
 }
