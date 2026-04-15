@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 
 // ============================================================================
 // Enhanced Status Bar - git info, language picker, encoding, line/col, notifications

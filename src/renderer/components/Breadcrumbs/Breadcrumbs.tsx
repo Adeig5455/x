@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback } from 'react';
 
 // ============================================================================
 // Enhanced Breadcrumbs - dropdown navigation, symbol outline, keyboard nav
@@ -125,8 +125,6 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
   const [dropdownPos, setDropdownPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [hoveredIndex, setHoveredIndex] = useState<number>(-1);
 
-  if (!visible || items.length === 0) return null;
-
   const handleItemClick = useCallback((item: BreadcrumbItem, index: number, e: React.MouseEvent) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     if (item.children && item.children.length > 0) {
@@ -143,6 +141,8 @@ export const Breadcrumbs: React.FC<BreadcrumbsProps> = ({
     onItemClick?.(item);
     onNavigate?.(item.path, item.type);
   }, [onItemClick, onNavigate]);
+
+  if (!visible || items.length === 0) return null;
 
   const getIconForType = (type: BreadcrumbItem['type']): React.ReactNode => {
     switch (type) {

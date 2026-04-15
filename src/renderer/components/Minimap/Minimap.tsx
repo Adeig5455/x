@@ -14,14 +14,6 @@ interface MinimapProps {
   scale?: number;
 }
 
-// Simple keyword detection for syntax-aware coloring
-const KEYWORDS = new Set([
-  'import', 'export', 'from', 'const', 'let', 'var', 'function', 'class',
-  'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break',
-  'interface', 'type', 'enum', 'extends', 'implements', 'async', 'await',
-  'try', 'catch', 'throw', 'new', 'this', 'super', 'default', 'void',
-]);
-
 const getLineColor = (line: string): string => {
   const trimmed = line.trim();
   if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
@@ -59,8 +51,6 @@ export const Minimap: React.FC<MinimapProps> = ({
 
   const lineHeight = 2 * scale;
   const charWidth = 0.5 * scale;
-
-  if (!visible) return null;
 
   // Render minimap canvas
   useEffect(() => {
@@ -128,7 +118,7 @@ export const Minimap: React.FC<MinimapProps> = ({
       const viewportHeight = (visibleRange.endLine - visibleRange.startLine) * lineHeight;
       ctx.fillRect(0, hoverY - viewportHeight / 2, canvasWidth, viewportHeight);
     }
-  }, [content, visibleRange, lineHeight, charWidth, width, isHovered, hoverLine, scale]);
+  }, [content, visibleRange, lineHeight, charWidth, width, isHovered, hoverLine, scale, visible]);
 
   const getLineFromY = useCallback((clientY: number): number => {
     const canvas = canvasRef.current;
@@ -168,6 +158,8 @@ export const Minimap: React.FC<MinimapProps> = ({
       setHoverLine(getLineFromY(e.clientY));
     }
   }, [isDragging, getLineFromY]);
+
+  if (!visible) return null;
 
   return (
     <div
