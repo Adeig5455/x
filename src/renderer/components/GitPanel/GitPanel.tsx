@@ -2,7 +2,9 @@ import React from 'react';
 import { useAppStore } from '../../store';
 
 export const GitPanel: React.FC = () => {
-  const { gitFiles, currentBranch, gitBranches } = useAppStore();
+  const gitFiles = useAppStore((s) => s.git.gitFiles);
+  const currentBranch = useAppStore((s) => s.git.currentBranch);
+  const gitBranches = useAppStore((s) => s.git.gitBranches);
 
   const stagedFiles = gitFiles.filter((f) => f.staged);
   const unstagedFiles = gitFiles.filter((f) => !f.staged);

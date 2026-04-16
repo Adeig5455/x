@@ -9,7 +9,8 @@ interface Command {
 }
 
 export const CommandPaletteOverlay: React.FC = () => {
-  const { commandPaletteOpen, toggleCommandPalette } = useAppStore();
+  const commandPaletteOpen = useAppStore((s) => s.ui.commandPaletteOpen);
+  const openCommandPalette = useAppStore((s) => s.ui.openCommandPalette);
   const [query, setQuery] = useState('');
   const [commands] = useState<Command[]>([]);
 
@@ -23,13 +24,13 @@ export const CommandPaletteOverlay: React.FC = () => {
     (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
         e.preventDefault();
-        toggleCommandPalette();
+        openCommandPalette();
       }
       if (e.key === 'Escape' && commandPaletteOpen) {
-        toggleCommandPalette();
+        openCommandPalette();
       }
     },
-    [commandPaletteOpen, toggleCommandPalette]
+    [commandPaletteOpen, openCommandPalette]
   );
 
   useEffect(() => {
@@ -40,7 +41,7 @@ export const CommandPaletteOverlay: React.FC = () => {
   if (!commandPaletteOpen) return null;
 
   return (
-    <div className="command-palette-overlay" onClick={toggleCommandPalette}>
+    <div className="command-palette-overlay" onClick={() => openCommandPalette()}>
       <div className="command-palette" onClick={(e) => e.stopPropagation()}>
         <input
           className="command-palette-input"
@@ -56,7 +57,7 @@ export const CommandPaletteOverlay: React.FC = () => {
               className="command-palette-item"
               onClick={() => {
                 cmd.action();
-                toggleCommandPalette();
+                openCommandPalette();
               }}
             >
               <span className="command-category">{cmd.category}</span>

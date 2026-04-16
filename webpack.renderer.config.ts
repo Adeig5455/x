@@ -1,12 +1,15 @@
 import path from 'path';
+import webpack from 'webpack';
 import HtmlWebpackPlugin from 'html-webpack-plugin';
 import type { Configuration } from 'webpack';
 
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
+const isBrowserDev = process.env.BROWSER_DEV === 'true';
+
 const config: Configuration = {
   entry: './src/renderer/index.tsx',
-  target: 'electron-renderer',
+  target: isBrowserDev ? 'web' : 'electron-renderer',
   output: {
     path: path.resolve(__dirname, 'dist/renderer'),
     filename: 'bundle.js',
@@ -18,6 +21,15 @@ const config: Configuration = {
       '@shared': path.resolve(__dirname, 'src/shared'),
       '@services': path.resolve(__dirname, 'src/services'),
     },
+    fallback: isBrowserDev ? {
+      path: require.resolve('path-browserify'),
+      events: require.resolve('events/'),
+      stream: false,
+      fs: false,
+      child_process: false,
+      os: false,
+      crypto: false,
+    } : undefined,
   },
   module: {
     rules: [
@@ -46,6 +58,12 @@ const config: Configuration = {
         'go', 'rust', 'html', 'css', 'json', 'markdown', 'yaml', 'sql',
       ],
     }),
+    ...(isBrowserDev ? [
+      new webpack.ProvidePlugin({
+        global: ['window'],
+        process: ['process/browser'],
+      }),
+    ] : []),
   ],
   devServer: {
     port: 3000,

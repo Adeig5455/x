@@ -1,190 +1,408 @@
 import { create } from 'zustand';
-import type { FileNode, EditorTab, AIMessage, AppSettings, SidebarPanel, GitFileStatus, GitBranch, SearchResult, BreadcrumbItem, Notification } from '../../shared/types';
+import { persist, devtools, subscribeWithSelector } from 'zustand/middleware';
+import type { EditorSlice } from './editorSlice';
+import type { AISlice } from './aiSlice';
+import type { FileSystemSlice } from './fileSystemSlice';
+import type { UISlice } from './uiSlice';
+import type { GitSlice } from './gitSlice';
+import type { SearchSlice } from './searchSlice';
+import type { SettingsSlice } from './settingsSlice';
+import type { NotificationsSlice } from './notificationsSlice';
+import type { DebugSlice } from './debugSlice';
+import type { ExtensionsSlice } from './extensionsSlice';
+import type { ProblemsSlice } from './problemsSlice';
+import type { SnippetsSlice } from './snippetsSlice';
+import type { WorkspaceSlice } from './workspaceSlice';
+import { createEditorSlice } from './editorSlice';
+import { createAISlice } from './aiSlice';
+import { createFileSystemSlice } from './fileSystemSlice';
+import { createUISlice } from './uiSlice';
+import { createGitSlice } from './gitSlice';
+import { createSearchSlice } from './searchSlice';
+import { createSettingsSlice } from './settingsSlice';
+import { createNotificationsSlice } from './notificationsSlice';
+import { createDebugSlice } from './debugSlice';
+import { createExtensionsSlice } from './extensionsSlice';
+import { createProblemsSlice } from './problemsSlice';
+import { createSnippetsSlice } from './snippetsSlice';
+import { createWorkspaceSlice } from './workspaceSlice';
 
-export interface AppState {
-  // Project
-  hasOpenProject: boolean;
-  projectPath: string | null;
-  fileTree: FileNode[];
+// ============================================================================
+// Combined Store Type
+// ============================================================================
 
-  // Editor
-  tabs: EditorTab[];
-  activeTabId: string | null;
-
-  // Sidebar
-  activePanel: SidebarPanel;
-  sidebarVisible: boolean;
-  sidebarWidth: number;
-
-  // AI
-  aiMessages: AIMessage[];
-  aiLoading: boolean;
-
-  // Terminal
-  terminalVisible: boolean;
-  terminalHeight: number;
-
-  // Search
-  searchQuery: string;
-  searchResults: SearchResult[];
-
-  // Git
-  gitFiles: GitFileStatus[];
-  gitBranches: GitBranch[];
-  currentBranch: string;
-
-  // Settings
-  settings: AppSettings;
-
-  // UI
-  commandPaletteOpen: boolean;
-  breadcrumbs: BreadcrumbItem[];
-  notifications: Notification[];
-
-  // Actions - Project
-  setProjectPath: (path: string | null) => void;
-  setFileTree: (tree: FileNode[]) => void;
-
-  // Actions - Editor
-  openTab: (tab: EditorTab) => void;
-  closeTab: (tabId: string) => void;
-  setActiveTab: (tabId: string) => void;
-  updateTabContent: (tabId: string, content: string) => void;
-
-  // Actions - Sidebar
-  setActivePanel: (panel: SidebarPanel) => void;
-  toggleSidebar: () => void;
-  setSidebarWidth: (width: number) => void;
-
-  // Actions - AI
-  addAIMessage: (message: AIMessage) => void;
-  clearAIMessages: () => void;
-  setAILoading: (loading: boolean) => void;
-
-  // Actions - Terminal
-  toggleTerminal: () => void;
-  setTerminalHeight: (height: number) => void;
-
-  // Actions - Search
-  setSearchQuery: (query: string) => void;
-  setSearchResults: (results: SearchResult[]) => void;
-
-  // Actions - Git
-  setGitFiles: (files: GitFileStatus[]) => void;
-  setGitBranches: (branches: GitBranch[]) => void;
-  setCurrentBranch: (branch: string) => void;
-
-  // Actions - Settings
-  updateSettings: (settings: Partial<AppSettings>) => void;
-
-  // Actions - UI
-  toggleCommandPalette: () => void;
-  setBreadcrumbs: (items: BreadcrumbItem[]) => void;
-  addNotification: (notification: Notification) => void;
-  removeNotification: (id: string) => void;
+export interface AppStore {
+  editor: EditorSlice;
+  ai: AISlice;
+  fileSystem: FileSystemSlice;
+  ui: UISlice;
+  git: GitSlice;
+  search: SearchSlice;
+  settings: SettingsSlice;
+  notifications: NotificationsSlice;
+  debug: DebugSlice;
+  extensions: ExtensionsSlice;
+  problems: ProblemsSlice;
+  snippets: SnippetsSlice;
+  workspace: WorkspaceSlice;
 }
 
-const defaultSettings: AppSettings = {
-  theme: 'dark',
-  fontSize: 14,
-  fontFamily: "'Fira Code', 'Cascadia Code', Consolas, monospace",
-  tabSize: 2,
-  wordWrap: false,
-  minimap: true,
-  breadcrumbs: true,
-  aiModel: 'gpt-4',
-  aiApiKey: '',
-  autoComplete: true,
-  terminalFontSize: 13,
+// ============================================================================
+// Action Logger
+// ============================================================================
+
+interface LogEntry {
+  timestamp: number;
+  action: string;
+  payload?: unknown;
+}
+
+const actionLogger: LogEntry[] = [];
+
+export function getActionLog(): ReadonlyArray<LogEntry> {
+  return actionLogger;
+}
+
+export function clearActionLog(): void {
+  actionLogger.length = 0;
+}
+
+// ============================================================================
+// Store Selectors (Memoized)
+// ============================================================================
+
+export const selectors = {
+  // Editor selectors
+  activeTab: (state: AppStore) => {
+    const group = state.editor.groups.find((g) => g.id === state.editor.activeGroupId);
+    if (!group) return null;
+    return group.tabs.find((t) => t.id === group.activeTabId) ?? null;
+  },
+
+  activeTabContent: (state: AppStore) => {
+    const group = state.editor.groups.find((g) => g.id === state.editor.activeGroupId);
+    if (!group) return '';
+    const tab = group.tabs.find((t) => t.id === group.activeTabId);
+    return tab?.content ?? '';
+  },
+
+  dirtyTabs: (state: AppStore) => {
+    return state.editor.groups.flatMap((g) => g.tabs.filter((t) => t.isDirty));
+  },
+
+  totalTabCount: (state: AppStore) => {
+    return state.editor.groups.reduce((sum: number, g) => sum + g.tabs.length, 0);
+  },
+
+  // AI selectors
+  activeConversation: (state: AppStore) => {
+    return state.ai.conversations.find((c) => c.id === state.ai.activeConversationId) ?? null;
+  },
+
+  activeMessages: (state: AppStore) => {
+    const conv = state.ai.conversations.find((c) => c.id === state.ai.activeConversationId);
+    return conv?.messages ?? [];
+  },
+
+  isAIBusy: (state: AppStore) => state.ai.aiLoading || state.ai.streamingMessageId !== null,
+
+  // FileSystem selectors
+  expandedDirs: (state: AppStore) => state.fileSystem.expandedDirs,
+  isPathExpanded: (path: string) => (state: AppStore) => state.fileSystem.expandedDirs.includes(path),
+
+  fileTreeFlat: (state: AppStore) => {
+    const result: Array<{ node: (typeof state.fileSystem.fileTree)[0]; depth: number }> = [];
+    const expandedSet = new Set(state.fileSystem.expandedDirs);
+    const walk = (nodes: typeof state.fileSystem.fileTree, depth: number) => {
+      for (const node of nodes) {
+        result.push({ node, depth });
+        if (node.type === 'directory' && node.children && expandedSet.has(node.path)) {
+          walk(node.children, depth + 1);
+        }
+      }
+    };
+    walk(state.fileSystem.fileTree, 0);
+    return result;
+  },
+
+  // Git selectors
+  stagedFiles: (state: AppStore) => state.git.gitFiles.filter((f) => f.staged),
+  unstagedFiles: (state: AppStore) => state.git.gitFiles.filter((f) => !f.staged),
+  hasConflicts: (state: AppStore) => state.git.conflictCount > 0,
+  isSynced: (state: AppStore) => state.git.aheadCount === 0 && state.git.behindCount === 0,
+
+  // Search selectors
+  hasActiveSearch: (state: AppStore) => state.search.searchQuery.length > 0,
+  searchResultCount: (state: AppStore) => state.search.searchResults.length,
+
+  // UI selectors
+  isZenMode: (state: AppStore) => state.ui.zenMode,
+  visibleNotifications: (state: AppStore) => state.ui.notifications.slice(0, 5),
+  unreadNotificationCount: (state: AppStore) => state.ui.notifications.length,
+
+  // Notifications selectors
+  unreadAdvancedNotifications: (state: AppStore) =>
+    state.notifications.notifications.filter((n) => !n.read),
+  pinnedNotifications: (state: AppStore) =>
+    state.notifications.notifications.filter((n) => n.pinned),
+
+  // Debug selectors
+  isDebugging: (state: AppStore) =>
+    state.debug.status === 'running' || state.debug.status === 'paused',
+  activeBreakpoints: (state: AppStore) =>
+    state.debug.breakpoints.filter((bp) => bp.enabled),
+  debugErrorCount: (state: AppStore) =>
+    state.debug.consoleEntries.filter((e) => e.type === 'error').length,
+
+  // Extensions selectors
+  enabledExtensions: (state: AppStore) =>
+    state.extensions.installed.filter((e) => e.status === 'installed'),
+  disabledExtensions: (state: AppStore) =>
+    state.extensions.installed.filter((e) => e.status === 'disabled'),
+
+  // Problems selectors
+  totalErrors: (state: AppStore) =>
+    state.problems.diagnostics.filter((d) => d.severity === 'error').length,
+  totalWarnings: (state: AppStore) =>
+    state.problems.diagnostics.filter((d) => d.severity === 'warning').length,
+
+  // Workspace selectors
+  workspaceFolderCount: (state: AppStore) => state.workspace.folders.length,
+  activeWorkspaceFolder: (state: AppStore) =>
+    state.workspace.folders.find((f) => f.id === state.workspace.activeFolderId) ?? null,
 };
 
-export const useAppStore = create<AppState>((set) => ({
-  // Initial state
-  hasOpenProject: false,
-  projectPath: null,
-  fileTree: [],
-  tabs: [],
-  activeTabId: null,
-  activePanel: 'explorer',
-  sidebarVisible: true,
-  sidebarWidth: 260,
-  aiMessages: [],
-  aiLoading: false,
-  terminalVisible: false,
-  terminalHeight: 200,
-  searchQuery: '',
-  searchResults: [],
-  gitFiles: [],
-  gitBranches: [],
-  currentBranch: 'main',
-  settings: defaultSettings,
-  commandPaletteOpen: false,
-  breadcrumbs: [],
-  notifications: [],
+// ============================================================================
+// Store Creation with Middleware Stack
+// ============================================================================
 
-  // Project actions
-  setProjectPath: (path) => set({ projectPath: path, hasOpenProject: path !== null }),
-  setFileTree: (tree) => set({ fileTree: tree }),
+export const useAppStore = create<AppStore>()(
+  devtools(
+    subscribeWithSelector(
+      persist(
+        (set, get) => ({
+          editor: createEditorSlice(
+            ((fn: (s: { editor: EditorSlice }) => Partial<{ editor: EditorSlice }>) => {
+              set((state) => {
+                const result = fn({ editor: state.editor });
+                if (result.editor) return { editor: { ...state.editor, ...result.editor } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createEditorSlice>[0],
+            (() => ({ editor: get().editor })) as Parameters<typeof createEditorSlice>[1]
+          ),
+          ai: createAISlice(
+            ((fn: (s: { ai: AISlice }) => Partial<{ ai: AISlice }>) => {
+              set((state) => {
+                const result = fn({ ai: state.ai });
+                if (result.ai) return { ai: { ...state.ai, ...result.ai } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createAISlice>[0],
+            (() => ({ ai: get().ai })) as Parameters<typeof createAISlice>[1]
+          ),
+          fileSystem: createFileSystemSlice(
+            ((fn: (s: { fileSystem: FileSystemSlice }) => Partial<{ fileSystem: FileSystemSlice }>) => {
+              set((state) => {
+                const result = fn({ fileSystem: state.fileSystem });
+                if (result.fileSystem) return { fileSystem: { ...state.fileSystem, ...result.fileSystem } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createFileSystemSlice>[0],
+            (() => ({ fileSystem: get().fileSystem })) as Parameters<typeof createFileSystemSlice>[1]
+          ),
+          ui: createUISlice(
+            ((fn: (s: { ui: UISlice }) => Partial<{ ui: UISlice }>) => {
+              set((state) => {
+                const result = fn({ ui: state.ui });
+                if (result.ui) return { ui: { ...state.ui, ...result.ui } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createUISlice>[0],
+            (() => ({ ui: get().ui })) as Parameters<typeof createUISlice>[1]
+          ),
+          git: createGitSlice(
+            ((fn: (s: { git: GitSlice }) => Partial<{ git: GitSlice }>) => {
+              set((state) => {
+                const result = fn({ git: state.git });
+                if (result.git) return { git: { ...state.git, ...result.git } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createGitSlice>[0],
+            (() => ({ git: get().git })) as Parameters<typeof createGitSlice>[1]
+          ),
+          search: createSearchSlice(
+            ((fn: (s: { search: SearchSlice }) => Partial<{ search: SearchSlice }>) => {
+              set((state) => {
+                const result = fn({ search: state.search });
+                if (result.search) return { search: { ...state.search, ...result.search } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createSearchSlice>[0],
+            (() => ({ search: get().search })) as Parameters<typeof createSearchSlice>[1]
+          ),
+          settings: createSettingsSlice(
+            ((fn: (s: { settings: SettingsSlice }) => Partial<{ settings: SettingsSlice }>) => {
+              set((state) => {
+                const result = fn({ settings: state.settings });
+                if (result.settings) return { settings: { ...state.settings, ...result.settings } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createSettingsSlice>[0],
+            (() => ({ settings: get().settings })) as Parameters<typeof createSettingsSlice>[1]
+          ),
+          notifications: createNotificationsSlice(
+            ((fn: (s: { notifications: NotificationsSlice }) => Partial<{ notifications: NotificationsSlice }>) => {
+              set((state) => {
+                const result = fn({ notifications: state.notifications });
+                if (result.notifications) return { notifications: { ...state.notifications, ...result.notifications } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createNotificationsSlice>[0],
+            (() => ({ notifications: get().notifications })) as Parameters<typeof createNotificationsSlice>[1]
+          ),
+          debug: createDebugSlice(
+            ((fn: (s: { debug: DebugSlice }) => Partial<{ debug: DebugSlice }>) => {
+              set((state) => {
+                const result = fn({ debug: state.debug });
+                if (result.debug) return { debug: { ...state.debug, ...result.debug } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createDebugSlice>[0],
+            (() => ({ debug: get().debug })) as Parameters<typeof createDebugSlice>[1]
+          ),
+          extensions: createExtensionsSlice(
+            ((fn: (s: { extensions: ExtensionsSlice }) => Partial<{ extensions: ExtensionsSlice }>) => {
+              set((state) => {
+                const result = fn({ extensions: state.extensions });
+                if (result.extensions) return { extensions: { ...state.extensions, ...result.extensions } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createExtensionsSlice>[0],
+            (() => ({ extensions: get().extensions })) as Parameters<typeof createExtensionsSlice>[1]
+          ),
+          problems: createProblemsSlice(
+            ((fn: (s: { problems: ProblemsSlice }) => Partial<{ problems: ProblemsSlice }>) => {
+              set((state) => {
+                const result = fn({ problems: state.problems });
+                if (result.problems) return { problems: { ...state.problems, ...result.problems } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createProblemsSlice>[0],
+            (() => ({ problems: get().problems })) as Parameters<typeof createProblemsSlice>[1]
+          ),
+          snippets: createSnippetsSlice(
+            ((fn: (s: { snippets: SnippetsSlice }) => Partial<{ snippets: SnippetsSlice }>) => {
+              set((state) => {
+                const result = fn({ snippets: state.snippets });
+                if (result.snippets) return { snippets: { ...state.snippets, ...result.snippets } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createSnippetsSlice>[0],
+            (() => ({ snippets: get().snippets })) as Parameters<typeof createSnippetsSlice>[1]
+          ),
+          workspace: createWorkspaceSlice(
+            ((fn: (s: { workspace: WorkspaceSlice }) => Partial<{ workspace: WorkspaceSlice }>) => {
+              set((state) => {
+                const result = fn({ workspace: state.workspace });
+                if (result.workspace) return { workspace: { ...state.workspace, ...result.workspace } } as Partial<AppStore>;
+                return {} as Partial<AppStore>;
+              });
+            }) as Parameters<typeof createWorkspaceSlice>[0],
+            (() => ({ workspace: get().workspace })) as Parameters<typeof createWorkspaceSlice>[1]
+          ),
+        }),
+        {
+          name: 'cursor-ide-store',
+          version: 1,
+          partialize: (state) => ({
+            // Only persist data properties, not action functions.
+            // On rehydration, zustand's shallow merge would clobber the
+            // slice objects (which contain action functions) with the
+            // deserialized versions (which lack functions) if we persisted
+            // the full slice. By extracting only data fields, rehydration
+            // merges cleanly with the live slice that still has its actions.
+            settings: {
+              settings: state.settings.settings,
+              settingsPanelOpen: state.settings.settingsPanelOpen,
+              settingsSearchQuery: state.settings.settingsSearchQuery,
+              activeSettingsCategory: state.settings.activeSettingsCategory,
+            },
+            ui: {
+              activePanel: state.ui.activePanel,
+              sidebarVisible: state.ui.sidebarVisible,
+              sidebarWidth: state.ui.sidebarWidth,
+              terminalVisible: state.ui.terminalVisible,
+              terminalHeight: state.ui.terminalHeight,
+              zenMode: state.ui.zenMode,
+              focusMode: state.ui.focusMode,
+            },
+            fileSystem: {
+              projectPath: state.fileSystem.projectPath,
+              projectName: state.fileSystem.projectName,
+              expandedDirs: state.fileSystem.expandedDirs,
+              selectedPath: state.fileSystem.selectedPath,
+              recentPaths: state.fileSystem.recentPaths,
+            },
+          }),
+          merge: (persistedState, currentState) => {
+            const persisted = persistedState as Partial<AppStore> | undefined;
+            if (!persisted) return currentState;
+            return {
+              ...currentState,
+              settings: { ...currentState.settings, ...(persisted.settings || {}) },
+              ui: { ...currentState.ui, ...(persisted.ui || {}) },
+              fileSystem: { ...currentState.fileSystem, ...(persisted.fileSystem || {}) },
+            };
+          },
+        }
+      )
+    ),
+    { name: 'CursorIDE', enabled: process.env.NODE_ENV === 'development' }
+  )
+);
 
-  // Editor actions
-  openTab: (tab) =>
-    set((state) => ({
-      tabs: [...state.tabs.map((t) => ({ ...t, isActive: false })), { ...tab, isActive: true }],
-      activeTabId: tab.id,
-    })),
-  closeTab: (tabId) =>
-    set((state) => {
-      const newTabs = state.tabs.filter((t) => t.id !== tabId);
-      const newActiveId = state.activeTabId === tabId
-        ? newTabs[newTabs.length - 1]?.id ?? null
-        : state.activeTabId;
-      return {
-        tabs: newTabs.map((t) => ({ ...t, isActive: t.id === newActiveId })),
-        activeTabId: newActiveId,
-      };
-    }),
-  setActiveTab: (tabId) =>
-    set((state) => ({
-      tabs: state.tabs.map((t) => ({ ...t, isActive: t.id === tabId })),
-      activeTabId: tabId,
-    })),
-  updateTabContent: (tabId, content) =>
-    set((state) => ({
-      tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, content, isDirty: true } : t)),
-    })),
+// ============================================================================
+// Store Subscriptions (Side Effects)
+// ============================================================================
 
-  // Sidebar actions
-  setActivePanel: (panel) => set({ activePanel: panel, sidebarVisible: true }),
-  toggleSidebar: () => set((state) => ({ sidebarVisible: !state.sidebarVisible })),
-  setSidebarWidth: (width) => set({ sidebarWidth: width }),
+useAppStore.subscribe(
+  (state) => state.editor.groups.flatMap((g) => g.tabs.filter((t) => t.isDirty)).length,
+  (dirtyCount) => {
+    if (dirtyCount > 0 && dirtyCount % 5 === 0) {
+      console.warn(`[CursorIDE] ${dirtyCount} unsaved files`);
+    }
+  }
+);
 
-  // AI actions
-  addAIMessage: (message) => set((state) => ({ aiMessages: [...state.aiMessages, message] })),
-  clearAIMessages: () => set({ aiMessages: [] }),
-  setAILoading: (loading) => set({ aiLoading: loading }),
+useAppStore.subscribe(
+  (state) => state.settings.settings.theme,
+  (theme) => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }
+);
 
-  // Terminal actions
-  toggleTerminal: () => set((state) => ({ terminalVisible: !state.terminalVisible })),
-  setTerminalHeight: (height) => set({ terminalHeight: height }),
+// ============================================================================
+// Store Utilities
+// ============================================================================
 
-  // Search actions
-  setSearchQuery: (query) => set({ searchQuery: query }),
-  setSearchResults: (results) => set({ searchResults: results }),
+function extractSnapshot(state: Record<string, unknown>): Record<string, unknown> {
+  const snapshot: Record<string, unknown> = {};
+  for (const key of Object.keys(state)) {
+    if (typeof state[key] !== 'function' && !key.startsWith('_')) {
+      snapshot[key] = state[key];
+    }
+  }
+  return snapshot;
+}
 
-  // Git actions
-  setGitFiles: (files) => set({ gitFiles: files }),
-  setGitBranches: (branches) => set({ gitBranches: branches }),
-  setCurrentBranch: (branch) => set({ currentBranch: branch }),
+export function resetStore(): void {
+  useAppStore.setState({} as AppStore, true);
+}
 
-  // Settings actions
-  updateSettings: (newSettings) =>
-    set((state) => ({ settings: { ...state.settings, ...newSettings } })),
+export function getStoreSnapshot(): Partial<AppStore> {
+  const state = useAppStore.getState();
+  return extractSnapshot(state as unknown as Record<string, unknown>) as Partial<AppStore>;
+}
 
-  // UI actions
-  toggleCommandPalette: () => set((state) => ({ commandPaletteOpen: !state.commandPaletteOpen })),
-  setBreadcrumbs: (items) => set({ breadcrumbs: items }),
-  addNotification: (notification) =>
-    set((state) => ({ notifications: [...state.notifications, notification] })),
-  removeNotification: (id) =>
-    set((state) => ({ notifications: state.notifications.filter((n) => n.id !== id) })),
-}));
+export type { EditorSlice, AISlice, FileSystemSlice, UISlice, GitSlice, SearchSlice, SettingsSlice, NotificationsSlice, DebugSlice, ExtensionsSlice, ProblemsSlice, SnippetsSlice, WorkspaceSlice };
