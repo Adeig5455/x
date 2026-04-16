@@ -316,10 +316,45 @@ export const useAppStore = create<AppStore>()(
           name: 'cursor-ide-store',
           version: 1,
           partialize: (state) => ({
-            settings: state.settings,
-            ui: state.ui,
-            fileSystem: state.fileSystem,
+            // Only persist data properties, not action functions.
+            // On rehydration, zustand's shallow merge would clobber the
+            // slice objects (which contain action functions) with the
+            // deserialized versions (which lack functions) if we persisted
+            // the full slice. By extracting only data fields, rehydration
+            // merges cleanly with the live slice that still has its actions.
+            settings: {
+              settings: state.settings.settings,
+              settingsPanelOpen: state.settings.settingsPanelOpen,
+              settingsSearchQuery: state.settings.settingsSearchQuery,
+              activeSettingsCategory: state.settings.activeSettingsCategory,
+            },
+            ui: {
+              activePanel: state.ui.activePanel,
+              sidebarVisible: state.ui.sidebarVisible,
+              sidebarWidth: state.ui.sidebarWidth,
+              terminalVisible: state.ui.terminalVisible,
+              terminalHeight: state.ui.terminalHeight,
+              zenMode: state.ui.zenMode,
+              focusMode: state.ui.focusMode,
+            },
+            fileSystem: {
+              projectPath: state.fileSystem.projectPath,
+              projectName: state.fileSystem.projectName,
+              expandedDirs: state.fileSystem.expandedDirs,
+              selectedPath: state.fileSystem.selectedPath,
+              recentPaths: state.fileSystem.recentPaths,
+            },
           }),
+          merge: (persistedState, currentState) => {
+            const persisted = persistedState as Partial<AppStore> | undefined;
+            if (!persisted) return currentState;
+            return {
+              ...currentState,
+              settings: { ...currentState.settings, ...(persisted.settings || {}) },
+              ui: { ...currentState.ui, ...(persisted.ui || {}) },
+              fileSystem: { ...currentState.fileSystem, ...(persisted.fileSystem || {}) },
+            };
+          },
         }
       )
     ),

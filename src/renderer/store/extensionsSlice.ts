@@ -116,7 +116,7 @@ export const createExtensionsSlice = (
     set((state) => ({
       extensions: {
         ...state.extensions,
-        installed: state.extensions.installed.filter((e) => e.id !== id && !e.isBuiltin),
+        installed: state.extensions.installed.filter((e) => e.id !== id || e.isBuiltin),
         selectedExtensionId: state.extensions.selectedExtensionId === id ? null : state.extensions.selectedExtensionId,
       },
     }));

@@ -55,9 +55,11 @@ const DEFAULT_EXCLUDE_PATTERNS = [
 export function globToRegex(pattern: string): RegExp {
   let regexStr = pattern
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*\//g, '<<<GLOBSTAR_SLASH>>>')
     .replace(/\*\*/g, '<<<GLOBSTAR>>>')
     .replace(/\*/g, '[^/]*')
     .replace(/\?/g, '[^/]')
+    .replace(/<<<GLOBSTAR_SLASH>>>/g, '(.+/)?')
     .replace(/<<<GLOBSTAR>>>/g, '.*');
   
   return new RegExp(`^${regexStr}$`);
